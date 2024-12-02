@@ -26,7 +26,7 @@
 #include "uart_hal.h"
 #include "ad5933.h"
 #include <cstdio>
-//#include <stdio.h>
+#include <stdio.h>
 
 const char* commands[3] = {"START_FREQ","STEP_FREQ","STEP_COUNT"};
 const char* initTest[5] = {"Reset","StatFreq","StepFreq","StepCount","OutputRange"};
