@@ -203,7 +203,7 @@ HAL_StatusTypeDef AD5933::setOutputRange(HAL_OutputRange range){
 }
 
 HAL_StatusTypeDef AD5933::getComplexData(int *real,int *imag){
-	while((readRegister(STATUS_REG) &STATUS_DATA_VALID) != STATUS_DATA_VALID);
+//	while((readRegister(STATUS_REG) &STATUS_DATA_VALID) != STATUS_DATA_VALID);
 	uint8_t realComp[2];
 	uint8_t imagComp[2];
 	if( readByte(_hi2c, REAL_DATA_1, &realComp[0]) == HAL_OK &&
