@@ -138,7 +138,7 @@ HAL_StatusTypeDef UartDMA::write(uint8_t *pData, uint16_t Size)
 	if(ret != HAL_OK){
 		_is_tx_done = true;
 	}
-
+	while(!_is_tx_done);
 	return ret;
 }
 HAL_StatusTypeDef UartDMA::start_read(void)

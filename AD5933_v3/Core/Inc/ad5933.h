@@ -72,6 +72,8 @@ class AD5933{
 public:
 	AD5933(I2C_HandleTypeDef *hi2c);
 	~AD5933();
+	uint8_t init(uint32_t StartFreq,uint32_t IncrementFreq,uint32_t IncrementCount,HAL_OutputRange OutRange,bool ExternalClock);
+	uint8_t init(uint32_t StartFreq,uint32_t IncrementFreq,uint32_t IncrementCount,HAL_OutputRange OutRange);
 
 	HAL_StatusTypeDef setControlRegister(uint8_t mode);
 	HAL_StatusTypeDef reset(void);
@@ -83,8 +85,8 @@ public:
 	HAL_StatusTypeDef setPGAGain(bool gain);
 	HAL_StatusTypeDef setPowerMode(HAL_PowerMode level);
 	HAL_StatusTypeDef setOutputRange(HAL_OutputRange range);
-	HAL_StatusTypeDef getComplexData(int *real,int *imag);
-	HAL_StatusTypeDef frequencySweep(int real[],int imag[],int n);
+	HAL_StatusTypeDef getComplexData(int16_t *real,int16_t *imag);
+	HAL_StatusTypeDef frequencySweep(int16_t real[],int16_t imag[],int n);
 	HAL_StatusTypeDef calibrate(double gain[],int ref,int n);
 
 	uint8_t readRegister(uint8_t reg);

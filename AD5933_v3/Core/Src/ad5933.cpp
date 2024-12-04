@@ -35,6 +35,27 @@ HAL_StatusTypeDef AD5933::readByte(I2C_HandleTypeDef *hi2c, uint8_t reg,uint8_t 
 }
 
 
+uint8_t AD5933::init(uint32_t StartFreq,uint32_t IncrementFreq,uint32_t IncrementCount,HAL_OutputRange OutRange, bool ExternalClock = true){
+	if(reset() != HAL_OK)
+		return 1;
+	if(setExternalClockSource(ExternalClock) != HAL_OK)
+		return 2;
+	if(setStartFrequency(StartFreq) != HAL_OK)
+		return 3;
+	if(setIncrementFrequency(IncrementFreq) != HAL_OK)
+		return 4;
+	if(setNumberIncrements(IncrementCount) != HAL_OK)
+		return 5;
+	if(setOutputRange(OutRange)!= HAL_OK)
+		return 6;
+	return 0;
+
+}
+
+uint8_t AD5933::init(uint32_t StartFreq,uint32_t IncrementFreq,uint32_t IncrementCount,HAL_OutputRange OutRange){
+	return init(StartFreq,IncrementFreq,IncrementCount,OutRange,true);
+}
+
 HAL_StatusTypeDef AD5933::writeByte(I2C_HandleTypeDef *hi2c, uint8_t reg,uint8_t data){
 	return HAL_I2C_Mem_Write(hi2c, AD5933_ADDR, reg, I2C_MEMADD_SIZE_8BIT, &data, 1, 1000);
 }
@@ -202,7 +223,7 @@ HAL_StatusTypeDef AD5933::setOutputRange(HAL_OutputRange range){
 	return writeByte(_hi2c, CTRL_REG1, val);
 }
 
-HAL_StatusTypeDef AD5933::getComplexData(int *real,int *imag){
+HAL_StatusTypeDef AD5933::getComplexData(int16_t *real,int16_t *imag){
 //	while((readRegister(STATUS_REG) &STATUS_DATA_VALID) != STATUS_DATA_VALID);
 	uint8_t realComp[2];
 	uint8_t imagComp[2];
@@ -210,7 +231,7 @@ HAL_StatusTypeDef AD5933::getComplexData(int *real,int *imag){
 		readByte(_hi2c, REAL_DATA_2, &realComp[1]) == HAL_OK &&
 		readByte(_hi2c, IMAG_DATA_1, &imagComp[0]) == HAL_OK &&
 		readByte(_hi2c, IMAG_DATA_2, &imagComp[1]) == HAL_OK){
-		*real = (int)(((int)(realComp[0] << 8) | (int)realComp[1]) & 0xFFFF);
+		*real = (int)(((realComp[0] << 8) | realComp[1]) & 0xFFFF);
 		*imag = (int)(((imagComp[0] << 8) | imagComp[1]) & 0xFFFF);
 		return HAL_OK;
 	}
@@ -220,7 +241,7 @@ HAL_StatusTypeDef AD5933::getComplexData(int *real,int *imag){
 		return HAL_ERROR;
 	}
 }
-HAL_StatusTypeDef AD5933::frequencySweep(int real[],int imag[],int n){
+HAL_StatusTypeDef AD5933::frequencySweep(int16_t real[],int16_t imag[],int n){
 	if(!(setPowerMode(POWER_STANDBY) == HAL_OK &&
 	setControlRegister(CTRL_INIT_START_F) == HAL_OK &&
 	setControlRegister(CTRL_START_F_SWEEP) == HAL_OK))
@@ -250,5 +271,20 @@ HAL_StatusTypeDef AD5933::frequencySweep(int real[],int imag[],int n){
 
 
 HAL_StatusTypeDef AD5933::calibrate(double gain[],int ref,int n){
+	int16_t* real = (int16_t*)malloc(n*sizeof(int16_t));
+	int16_t* imag = (int16_t*)malloc(n*sizeof(int16_t));
+	if(frequencySweep(real, imag, n)!=HAL_OK)
+	{
+		free(real);
+		free(imag);
+		return HAL_ERROR;
+	}
+	for(int i = 0;i<n;i++)
+	{
+		gain[i] = (double)(1.0/ref)/sqrt(pow(real[i],2)+pow(imag[i],2));
+	}
+
+	free(real);
+	free(imag);
 	return HAL_OK;
 }
