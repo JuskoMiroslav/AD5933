@@ -17,6 +17,9 @@ void SystemClock_Config(void);
 
 void recvUart(UartDMA& uart1,bool& newData, char* str);
 bool freqSweep(UartDMA &uart1,AD5933 &ad5933,int16_t real[],int16_t imag[],int n);
+void parseData(char* str);
+double gain[10];
+
 
 int main(void)
 {
@@ -28,8 +31,17 @@ int main(void)
   MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_I2C1_Init();
+  char str[100] = {0};
+  parseData((char*)"StartSweep StartFrequency=100 StepFrequency=10 StepCount=2");
+  bool newData = false;
   UartDMA uart1(USART2,&huart2);
-  HAL_Delay(1000);
+  uart1.start_read();
+//  HAL_Delay(1000);
+  while(newData != true && strcmp(str,"Connected") != 0){
+  	  recvUart(uart1, newData, str);
+  	  HAL_Delay(100);
+  }
+  newData = false;
   int StartFreq = 10;
   int StepFreq = 10;
   int StepCount = 10;
@@ -40,18 +52,17 @@ int main(void)
   if(res != 0)
 	  {
 
+	  	  uart1.write((uint8_t*)"<",1);
 	  	  uart1.write((uint8_t*)errormsg,strlen(errormsg)*sizeof(uint8_t));
 
 		  uart1.write((uint8_t*)initTest[res],strlen(initTest[res])*sizeof(uint8_t));
 
-		  uart1.write((uint8_t*)"\r\n",2);
+		  uart1.write((uint8_t*)">",1);
 
 		  while(1);
 	  }
   uart1.write((uint8_t*)"<Initialization succes>",23);
-  char str[100] = {0};
-  uart1.start_read();
-  bool newData = false;
+  ad5933.calibrate(gain, 8200, 10);
   while (1)
   {
 	  int16_t* real;
@@ -63,6 +74,7 @@ int main(void)
 	  if(newData)
 	  {
 		  HAL_StatusTypeDef res = HAL_OK;
+
 		  for(int i = 0;i < 3;i++){
 			  int len = strlen(commands[i]);
 			  if(!strncmp(str,(char*)commands[i],len)){
@@ -245,6 +257,53 @@ bool freqSweep(UartDMA &uart1,AD5933 &ad5933,int16_t real[],int16_t imag[],int n
 	return ad5933.setPowerMode(POWER_STANDBY) == HAL_OK;
 }
 
+void parseData(char* str){
+	uint8_t mode = 0;
+	char* rest = (char*)malloc(strlen(str));
+	int StartFreq =0;
+	int IncrFreq =0;
+	int IncrCount = 0;
+	int RepeatCount =0;
+	strcpy(rest,str);
+	char* token = strtok_r(rest," ",&rest);
+	const char* commands[3] ={"StartSweep","RepeatSweep","Calibrate"};
+	const char* modifiers[] = {"StartFrequency","StepFrequency","StepCount","RepeatCount"};
+	if(token != NULL){
+		for(int i = 0;i < 3;i++){
+			if(strcmp(token,commands[i]) == 0){
+				mode = i;
+				break;
+			}
+		}
+		while(token != NULL){
+		for(int i = 0; i < 4;i++){
+			  int len = strlen(modifiers[i]);
+			  if(!strncmp(token,(char*)modifiers[i],len)){
+				  char* pStart = &token[len+1];
+				  int val = strtol(pStart,NULL,10);
+				  switch(i){
+				  	  case 0:
+				  		  StartFreq = val;
+				  		  break;
+
+				  	  case 1:
+				  		  IncrFreq = val;
+				  		  break;
+				  	  case 2:
+				  		  IncrCount = val;
+				  		  break;
+				  	  case 3:
+				  		  RepeatCount = val;
+				  		  break;
+					}
+			  }
+			}
+			token = strtok_r(NULL," ", &rest);
+		}
+
+	}
+	free(rest);
+}
 
 void Error_Handler(void)
 {
