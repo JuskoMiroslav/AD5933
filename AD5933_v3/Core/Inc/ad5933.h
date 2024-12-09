@@ -56,6 +56,15 @@
 #define STATUS_DATA_VALID	(0x02)
 #define STATUS_SWEEP_DONE	(0x04)
 
+struct settings{
+	uint32_t StartFreq;
+	uint32_t IncrementFreq;
+	uint16_t IncrementCount;
+	uint32_t SettlingCycles;
+	bool PGAgain =true;
+	uint8_t RepeatCount;
+};
+
 typedef enum{
 POWER_STANDBY = CTRL_STANDBY_MODE,
 POWER_DOWN = CTRL_POWER_DWN_MODE,

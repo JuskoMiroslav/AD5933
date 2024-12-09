@@ -7,9 +7,10 @@
 #include "uart_hal.h"
 #include "ad5933.h"
 #include <cstdio>
+#include "math.h"
 //#include <stdio.h>
 
-const char* commands[4] = {"START_FREQ","STEP_FREQ","STEP_COUNT","OUTPUT_RANGE"};
+//const char* commands[4] = {"START_FREQ","STEP_FREQ","STEP_COUNT","OUTPUT_RANGE"};
 const char* initTest[5] = {"Reset","StatFreq","StepFreq","StepCount","OutputRange"};
 const char * errormsg = "Error in initialization, in function ";
 
@@ -17,8 +18,9 @@ void SystemClock_Config(void);
 
 void recvUart(UartDMA& uart1,bool& newData, char* str);
 bool freqSweep(UartDMA &uart1,AD5933 &ad5933,int16_t real[],int16_t imag[],int n);
-void parseData(char* str);
-double gain[10];
+uint8_t parseData(char* str, settings* set);
+bool setParameters(AD5933 &ad5933, settings set, int16_t* real,int16_t* imag);
+
 
 
 int main(void)
@@ -32,19 +34,19 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   char str[100] = {0};
-  parseData((char*)"StartSweep StartFrequency=100 StepFrequency=10 StepCount=2");
+  settings set;
   bool newData = false;
   UartDMA uart1(USART2,&huart2);
   uart1.start_read();
+
 //  HAL_Delay(1000);
   while(newData != true && strcmp(str,"Connected") != 0){
   	  recvUart(uart1, newData, str);
-  	  HAL_Delay(100);
+//  	  HAL_Delay(100);
   }
   newData = false;
-  int StartFreq = 10;
-  int StepFreq = 10;
-  int StepCount = 10;
+//  parseData((char*)"StartSweep StartFrequency=100 StepFrequency=10 StepCount=2",&set);
+
   bool  StartSweep = false;
   bool  GetData = false;
   AD5933 ad5933(&hi2c1);
@@ -61,67 +63,55 @@ int main(void)
 
 		  while(1);
 	  }
+
+  double* gain = (double*)malloc(10*sizeof(double));
+
   uart1.write((uint8_t*)"<Initialization succes>",23);
   ad5933.calibrate(gain, 8200, 10);
+  int16_t* real;
+  int16_t* imag;
   while (1)
   {
-	  int16_t* real;
-	  int16_t* imag;
 //	  if(uart1.avalible())
 //		  HAL_Delay(100);
 
 	  recvUart(uart1, newData,str);
 	  if(newData)
 	  {
-		  HAL_StatusTypeDef res = HAL_OK;
-
-		  for(int i = 0;i < 3;i++){
-			  int len = strlen(commands[i]);
-			  if(!strncmp(str,(char*)commands[i],len)){
-				  char* pStart = &str[len+1];
-				  int val = strtol(pStart,NULL,10);
-
-				  switch(i){
-				  case 0:
-					  StartFreq =val;
-					  res = ad5933.setStartFrequency(StartFreq);
-					  break;
-				  case 1:
-					  StepFreq = val;
-					  res = ad5933.setIncrementFrequency(StepFreq);
-					  break;
-				  case 2:
-					  StepCount = val;
-					  res = ad5933.setNumberIncrements(StepCount);
-					  real = (int16_t*)malloc(StepCount*sizeof(int16_t));
-					  imag = (int16_t*)malloc(StepCount*sizeof(int16_t));
-					  break;
-				  case 3:
-					  res = ad5933.setNumberIncrements(val);
-				  }
-			  }
+		  switch(parseData(str, &set)){
+		  	  case 1:
+		  		  ad5933.setPowerMode(POWER_STANDBY);
+		  		  ad5933.reset();
+		  		  StartSweep = true;
+		  		  break;
+		  	  case 3:
+		  		  free(gain);
+		  		  gain = (double*)malloc(set.IncrementCount*sizeof(double));
+		  		  ad5933.calibrate(gain, 8200, set.IncrementCount);
+		  		  break;
+		  	  case 4:
+		  		  GetData = true;
+		  		  break;
+		  	  case 7:
+		  		  uart1.write((uint8_t*)"<Already connected>",19);
+		  		  break;
+		  	  default:
+		  		  ;
 		  }
-		  if(!strcmp(str,(char*)"START_SWEEP") && !StartSweep) {
-			  ad5933.setPowerMode(POWER_STANDBY);
-			  ad5933.reset();
-			  StartSweep = true;
-		  }
-		  if(!strcmp(str,(char*)"GET_DATA") && !StartSweep) {
-			  GetData = true;
-		  		  }
-		  if(res != HAL_OK)
+
+		  if(!setParameters(ad5933, set,real,imag))
 			  uart1.write((uint8_t*)"<NOK>",5);
-
-		  uart1.write((uint8_t*)"<OK> ",5);
-
-//		  memset(str,0,100*sizeof(char));
+		  else
+			  uart1.write((uint8_t*)"<OK> ",5);
 		  newData = false;
 		  memset(str,0,sizeof(str));
 	  }
 	  if(StartSweep == true){
+		  real = (int16_t*)malloc(set.IncrementCount * sizeof(int16_t));
+		  imag = (int16_t*)malloc(set.IncrementCount * sizeof(int16_t));
 
 //		  if(ad5933.frequencySweep(real, imag, StepCount)== HAL_OK){
-		  if(freqSweep(uart1, ad5933, real, imag, StepCount)){
+		  if(freqSweep(uart1, ad5933, real, imag, set.IncrementCount)){
 
 			  uart1.write((uint8_t*)"<SweepDone>",11);
 
@@ -130,24 +120,24 @@ int main(void)
 		  else
 			  HAL_Delay(1);
 	  }
-	  if(GetData == true)
-	  {
-		  float freq = StartFreq/1000.0;
+	  if(GetData == true){
+		  float freq = set.StartFreq/1000.0;
 		  uart1.write((uint8_t*)"<",1);
-		  for(int i = 0;i < StepCount;i++){
-			  sprintf(str,"f:%f, R:%d, I:%d\n",freq,real[i],imag[i]);
+		  for(int i = 0;i < set.IncrementCount;i++){
+			  float z = sqrt(pow(real[i],2)+pow(imag[i],2));
+			  float phi = atan2(imag[i],real[i]);
+			  sprintf(str,"f:%f, |Z|:%f, ph:%f\n",freq,1/(z*gain[i]),phi);
 			  uart1.write((uint8_t*)str,strlen(str)*sizeof(char));
-
-			  freq +=StepFreq/1000.0;
-
+			  freq +=set.IncrementFreq/1000.0;
 			  memset(str,0,sizeof(str));
-//				  HAL_Delay(100);
+			  HAL_Delay(10);
 		  }
-		  GetData = false;
+		  uart1.write((uint8_t*)">",1);
 		  free(real);
 		  free(imag);
-		  uart1.write((uint8_t*)">",1);
-	  }
+		  GetData = false;
+		  }
+
 
   }
 }
@@ -257,21 +247,21 @@ bool freqSweep(UartDMA &uart1,AD5933 &ad5933,int16_t real[],int16_t imag[],int n
 	return ad5933.setPowerMode(POWER_STANDBY) == HAL_OK;
 }
 
-void parseData(char* str){
+uint8_t parseData(char* str,settings* set){
 	uint8_t mode = 0;
+	if(!strcmp(str,"Connected"))
+	{
+		return 7;
+	}
 	char* rest = (char*)malloc(strlen(str));
-	int StartFreq =0;
-	int IncrFreq =0;
-	int IncrCount = 0;
-	int RepeatCount =0;
 	strcpy(rest,str);
 	char* token = strtok_r(rest," ",&rest);
-	const char* commands[3] ={"StartSweep","RepeatSweep","Calibrate"};
+	const char* commands[] ={"StartSweep","RepeatSweep","Calibrate","GetData"};
 	const char* modifiers[] = {"StartFrequency","StepFrequency","StepCount","RepeatCount"};
 	if(token != NULL){
-		for(int i = 0;i < 3;i++){
+		for(int i = 0;i < 4;i++){
 			if(strcmp(token,commands[i]) == 0){
-				mode = i;
+				mode = i+1;
 				break;
 			}
 		}
@@ -283,26 +273,34 @@ void parseData(char* str){
 				  int val = strtol(pStart,NULL,10);
 				  switch(i){
 				  	  case 0:
-				  		  StartFreq = val;
+				  		  set->StartFreq= val;
 				  		  break;
-
 				  	  case 1:
-				  		  IncrFreq = val;
+				  		  set->IncrementFreq = val;
 				  		  break;
 				  	  case 2:
-				  		  IncrCount = val;
+				  		  set-> IncrementCount= val;
 				  		  break;
 				  	  case 3:
-				  		  RepeatCount = val;
+				  		  set->RepeatCount = val;
 				  		  break;
 					}
 			  }
 			}
 			token = strtok_r(NULL," ", &rest);
 		}
-
 	}
 	free(rest);
+	return mode;
+}
+
+bool setParameters(AD5933 &ad5933, settings set, int16_t* real,int16_t* imag){
+//	free(real);
+//	free(imag);
+
+	return(ad5933.setStartFrequency(set.StartFreq) == HAL_OK &&
+		   ad5933.setIncrementFrequency(set.IncrementFreq) == HAL_OK &&
+		   ad5933.setNumberIncrements(set.IncrementCount) == HAL_OK);
 }
 
 void Error_Handler(void)
