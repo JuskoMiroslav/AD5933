@@ -247,15 +247,16 @@ HAL_StatusTypeDef AD5933::frequencySweep(int16_t real[],int16_t imag[],int n){
 	setControlRegister(CTRL_START_F_SWEEP) == HAL_OK))
 		return HAL_ERROR;
 	int i = 0;
-
+	int16_t re,im;
 
 //	HAL_GPIO_WritePin(sync_GPIO_Port, sync_Pin, GPIO_PIN_SET);
 	while((readRegister(STATUS_REG) &STATUS_SWEEP_DONE) != STATUS_SWEEP_DONE){
-		if(getComplexData(&real[i], &imag[i]) != HAL_OK)
+		if(getComplexData(&re, &im) != HAL_OK)
 			return HAL_ERROR;
 		if(i >= n)
 			return HAL_ERROR;
-
+		real[i] = re;
+		imag[i] = im;
 //		setControlRegister(CTRL_REPEAT_FREQ);
 
 		i++;

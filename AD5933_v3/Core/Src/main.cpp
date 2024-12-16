@@ -49,6 +49,7 @@ int main(void)
 
   bool  StartSweep = false;
   bool  GetData = false;
+  uint8_t repeatCount = 1;
   AD5933 ad5933(&hi2c1);
   uint8_t res = ad5933.init(10000, 1000, 10, OUTPUT_RANGE_2);
   if(res != 0)
@@ -84,6 +85,9 @@ int main(void)
 		  		  ad5933.reset();
 		  		  StartSweep = true;
 		  		  break;
+		  	  case 2:
+		  		  StartSweep = true;
+		  		  break;
 		  	  case 3:
 		  		  free(gain);
 		  		  gain = (double*)malloc(set.IncrementCount*sizeof(double));
@@ -98,11 +102,12 @@ int main(void)
 		  	  default:
 		  		  ;
 		  }
-
-		  if(!setParameters(ad5933, set,real,imag))
-			  uart1.write((uint8_t*)"<NOK>",5);
-		  else
-			  uart1.write((uint8_t*)"<OK> ",5);
+		  if(GetData != true){
+			  if(!setParameters(ad5933, set,real,imag))
+				  uart1.write((uint8_t*)"<NOK>",5);
+			  else
+				  uart1.write((uint8_t*)"<OK> ",5);
+		  }
 		  newData = false;
 		  memset(str,0,sizeof(str));
 	  }
@@ -266,26 +271,26 @@ uint8_t parseData(char* str,settings* set){
 			}
 		}
 		while(token != NULL){
-		for(int i = 0; i < 4;i++){
-			  int len = strlen(modifiers[i]);
-			  if(!strncmp(token,(char*)modifiers[i],len)){
-				  char* pStart = &token[len+1];
-				  int val = strtol(pStart,NULL,10);
-				  switch(i){
-				  	  case 0:
-				  		  set->StartFreq= val;
-				  		  break;
-				  	  case 1:
-				  		  set->IncrementFreq = val;
-				  		  break;
-				  	  case 2:
-				  		  set-> IncrementCount= val;
-				  		  break;
-				  	  case 3:
-				  		  set->RepeatCount = val;
-				  		  break;
+			for(int i = 0; i < 4;i++){
+				int len = strlen(modifiers[i]);
+				if(!strncmp(token,(char*)modifiers[i],len)){
+					char* pStart = &token[len+1];
+					int val = strtol(pStart,NULL,10);
+					switch(i){
+						case 0:
+							set->StartFreq= val;
+							break;
+						case 1:
+							set->IncrementFreq = val;
+							break;
+						case 2:
+							set-> IncrementCount= val;
+							break;
+						case 3:
+							set->RepeatCount = val;
+							break;
 					}
-			  }
+				}
 			}
 			token = strtok_r(NULL," ", &rest);
 		}
