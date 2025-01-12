@@ -61,6 +61,7 @@ struct settings{
 	uint32_t IncrementFreq;
 	uint16_t IncrementCount;
 	uint32_t SettlingCycles;
+	uint16_t Averaging;
 	bool PGAgain =true;
 	uint8_t RepeatCount;
 };
@@ -95,8 +96,8 @@ public:
 	HAL_StatusTypeDef setPowerMode(HAL_PowerMode level);
 	HAL_StatusTypeDef setOutputRange(HAL_OutputRange range);
 	HAL_StatusTypeDef getComplexData(int16_t *real,int16_t *imag);
-	HAL_StatusTypeDef frequencySweep(int16_t real[],int16_t imag[],int n);
-	HAL_StatusTypeDef calibrate(double gain[],int ref,int n);
+	HAL_StatusTypeDef frequencySweep(int16_t real[],int16_t imag[],int n,int repeatFirst);
+	HAL_StatusTypeDef calibrate(double gain[],int ref,int n,int repeatCount);
 
 	uint8_t readRegister(uint8_t reg);
 
