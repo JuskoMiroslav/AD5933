@@ -9,6 +9,7 @@
 #define INC_AD5933_H_
 
 #include "main.h"
+#include <vector>
 
 #define AD5933_ADDR			(0x0D<<1)
 #define OSC_FREQ			(16000000U)
@@ -96,11 +97,9 @@ public:
 	HAL_StatusTypeDef setPowerMode(HAL_PowerMode level);
 	HAL_StatusTypeDef setOutputRange(HAL_OutputRange range);
 	HAL_StatusTypeDef getComplexData(int16_t *real,int16_t *imag);
-	HAL_StatusTypeDef frequencySweep(int16_t real[],int16_t imag[],int n,int repeatFirst);
-	HAL_StatusTypeDef calibrate(double gain[],int ref,int n,int repeatCount);
-
+	HAL_StatusTypeDef frequencySweep(std::vector<int16_t> &real, std::vector<int16_t> &imag,int n,int repeatFirst);
+	HAL_StatusTypeDef calibrate(std::vector<float> &gain,int ref,int n,std::vector<int16_t> &real, std::vector<int16_t> &imag);
 	uint8_t readRegister(uint8_t reg);
-
 
 	double getTemp();
 protected:
@@ -108,6 +107,7 @@ protected:
 private:
 	static HAL_StatusTypeDef readByte(I2C_HandleTypeDef *hi2c, uint8_t reg,uint8_t *data);
 	static HAL_StatusTypeDef writeByte(I2C_HandleTypeDef *hi2c, uint8_t reg,uint8_t data);
+
 };
 
 #endif /* INC_AD5933_H_ */
