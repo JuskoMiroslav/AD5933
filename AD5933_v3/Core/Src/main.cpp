@@ -11,8 +11,11 @@
 #include "math.h"
 #include <stdio.h>
 #include <vector>
+#include <complex>
 
+#define M_PI 3.14159265358979323846
 //const char* commands[4] = {"START_FREQ","STEP_FREQ","STEP_COUNT","OUTPUT_RANGE"};
+
 const char *initTest[5] =
 { "Reset", "StatFreq", "StepFreq", "StepCount", "OutputRange" };
 const char *errormsg = "Error in initialization, in function ";
@@ -78,12 +81,14 @@ int main(void)
 		while (1)
 			;
 	}
-
-	std::vector<float> gain;
-	std::vector<int16_t> real;
-	std::vector<int16_t> imag;
+	std::vector<std::complex<double>> reference;
+	std::vector<std::complex<double>> measured;
+//	std::vector<float> gain;
+//	std::vector<int16_t> real;
+//	std::vector<int16_t> imag;
 	uart1.write((uint8_t*) "<Initialization succes>", 23);
-	ad5933.calibrate(gain, 8200, 50, real, imag);
+	ad5933.frequencySweep(reference, 50, 50);
+//	ad5933.calibrate(gain, 8200, 50, real, imag);
 	while (1)
 	{
 //	  if(uart1.avalible())
@@ -106,9 +111,10 @@ int main(void)
 				pin1.write(GPIO_PIN_SET);
 				pin2.write(GPIO_PIN_SET);
 				pin3.write(GPIO_PIN_SET);
-				gain.clear();
-//				gain = (double*) malloc(set.IncrementCount * sizeof(double));
-				ad5933.calibrate(gain, 820, set.IncrementCount, real, imag);
+//				gain.clear();
+//				ad5933.calibrate(gain, 820, set.IncrementCount, real, imag);
+				reference.clear();
+				ad5933.frequencySweep(reference, set.IncrementCount, 50);
 				pin1.write(GPIO_PIN_RESET);
 				pin2.write(GPIO_PIN_RESET);
 				pin3.write(GPIO_PIN_RESET);
@@ -136,12 +142,15 @@ int main(void)
 		}
 		if (StartSweep == true)
 		{
-			real.clear();
-			imag.clear();
+//			real.clear();
+//			imag.clear();
+			measured.clear();
 
 //		  if(ad5933.frequencySweep(real, imag, StepCount)== HAL_OK){
 
-			if (freqSweep(uart1, ad5933, real, imag, set))
+//			if (freqSweep(uart1, ad5933, real, imag, set))
+			if (ad5933.frequencySweep(measured, set.IncrementCount,
+					set.RepeatCount) == HAL_OK)
 			{
 
 				uart1.write((uint8_t*) "<SweepDone>", 11);
@@ -155,26 +164,55 @@ int main(void)
 		{
 			float freq = set.StartFreq / 1000.0;
 			uart1.write((uint8_t*) "<", 1);
-			for (int i = 0; i < set.IncrementCount; i++)
+//			for (int i = 0; i < set.IncrementCount; i++)
+			int iteration = 0;
+			for (const auto &num : measured)
 			{
-				float z = sqrt(pow(real[i], 2) + pow(imag[i], 2));
-				float phi = atan2(imag[i], real[i]);
-
-				float Zabs = 1 / (z * gain.at(i));
 				memset(str, 0, sizeof(str));
+//				float z = sqrt(pow(real[i], 2) + pow(imag[i], 2));
+//				float phi = atan2(imag[i], real[i]);
+//				float Zabs = 1 / (z * gain.at(i));
+//				std::vector<double> gain =
+//				sprintf(str, "f:%8.3f, |Z|:%10.3f, ph:%10.3f,r:%ld,i%ld\n", freq, Zabs,
+				double magnitude = std::abs(reference.at(iteration));
+				double Zabs = 1 / (std::abs(num) * (1 / 820.0) / magnitude);
+				double phaseMeas = std::arg(num);
+				double phaseRef = std::arg(reference.at(iteration));
+				if (phaseMeas > M_PI ||phaseRef > M_PI)
+				{
+					phaseMeas += -(M_PI * 2);
+					phaseRef += -(M_PI * 2);
+				}
+				else if(phaseMeas < -M_PI || phaseRef < - M_PI)
+				{
+					phaseMeas += (M_PI * 2);
+					phaseRef += (M_PI * 2);
+				}
+				double phi = phaseMeas-phaseRef;
+
+				//				if(phi >M_PI){
+//					phi =-M_PI+phi;
+//				}
+//				if(phi <M_PI)
+//					phi = M_PI-phi;
 				sprintf(str, "f:%8.3f, |Z|:%10.3f, ph:%10.3f\n", freq, Zabs,
 						phi);
+
+//						phi,real[i],imag[i]);
+
 				uart1.write((uint8_t*) str, strlen(str) * sizeof(char));
 				freq += set.IncrementFreq / 1000.0;
 				HAL_Delay(2);
+				iteration++;
 			}
 			uart1.write((uint8_t*) ">>>>>", 5);
-			for (int i = 0; i < set.IncrementCount; i++){
-				float z = sqrt(pow(real[i], 2) + pow(imag[i], 2));
-				float Zabs = 1/ (z * gain.at(i));
-			}
-			real.clear();
-			imag.clear();
+//			for (int i = 0; i < set.IncrementCount; i++){
+//				float z = sqrt(pow(real[i], 2) + pow(imag[i], 2));
+//				float Zabs = 1/ (z * gain.at(i));
+//			}
+//			real.clear();
+//			imag.clear();
+			measured.clear();
 			GetData = false;
 		}
 

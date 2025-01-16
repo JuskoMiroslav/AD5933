@@ -270,8 +270,8 @@ HAL_StatusTypeDef AD5933::getComplexData(int16_t *real, int16_t *imag)
 		return HAL_ERROR;
 	}
 }
-HAL_StatusTypeDef AD5933::frequencySweep(std::vector<int16_t> &real, std::vector<int16_t> &imag, int n,
-		int repeatFirst)
+HAL_StatusTypeDef AD5933::frequencySweep(std::vector<int16_t> &real,
+		std::vector<int16_t> &imag, int n, int repeatFirst)
 {
 	if (!(setPowerMode(POWER_STANDBY) == HAL_OK
 			&& setControlRegister(CTRL_INIT_START_F) == HAL_OK
@@ -316,6 +316,50 @@ HAL_StatusTypeDef AD5933::frequencySweep(std::vector<int16_t> &real, std::vector
 	return setPowerMode(POWER_STANDBY);
 }
 
+HAL_StatusTypeDef AD5933::frequencySweep(std::vector<std::complex<double>> &num,int n,int repeatFirst){
+	if (!(setPowerMode(POWER_STANDBY) == HAL_OK
+			&& setControlRegister(CTRL_INIT_START_F) == HAL_OK
+			&& setControlRegister(CTRL_START_F_SWEEP) == HAL_OK))
+		return HAL_ERROR;
+	int i = 0;
+	int j = repeatFirst;
+	int16_t re, im;
+
+//	HAL_GPIO_WritePin(sync_GPIO_Port, sync_Pin, GPIO_PIN_SET);
+	while ((readRegister(STATUS_REG) & STATUS_SWEEP_DONE) != STATUS_SWEEP_DONE)
+	{
+		if (j > 0)
+		{
+			setControlRegister(CTRL_REPEAT_FREQ);
+			j--;
+		}
+		else
+		{
+			if (getComplexData(&re, &im) != HAL_OK)
+				return HAL_ERROR;
+			if (i >= n)
+				return HAL_ERROR;
+			else
+			{
+				i++;
+				setControlRegister(CTRL_INCREMENT_F);
+				num.push_back(std::complex<double>(re,im));
+			}
+
+		}
+//		setControlRegister(CTRL_REPEAT_FREQ);
+
+		while ((readRegister(STATUS_REG) & STATUS_DATA_VALID)
+				!= STATUS_DATA_VALID)
+			;
+
+	}
+//		HAL_Delay(5000);
+//	/(sync_GPIO_Port, sync_Pin, GPIO_PIN_RESET);
+	return setPowerMode(POWER_STANDBY);
+}
+
+
 HAL_StatusTypeDef AD5933::calibrate(std::vector<float> &gain, int ref, int n,
 		std::vector<int16_t> &real, std::vector<int16_t> &imag)
 {
@@ -329,7 +373,7 @@ HAL_StatusTypeDef AD5933::calibrate(std::vector<float> &gain, int ref, int n,
 	{
 		float magnitude = sqrt(pow(real[i], 2) + pow(imag[i], 2));
 		gain.push_back((1.0 / ref) / magnitude);
-		float x = gain.at(i);
+
 		__NOP();
 	}
 

@@ -10,7 +10,7 @@
 
 #include "main.h"
 #include <vector>
-
+#include <complex>
 #define AD5933_ADDR			(0x0D<<1)
 #define OSC_FREQ			(16000000U)
 
@@ -23,8 +23,8 @@
 #define START_FREQ_1    	(0x82)
 #define START_FREQ_2    	(0x83)
 #define START_FREQ_3   		(0x84)
-
 #define INC_FREQ_1      	(0x85)
+
 #define INC_FREQ_2      	(0x86)
 #define INC_FREQ_3      	(0x87)
 
@@ -98,7 +98,10 @@ public:
 	HAL_StatusTypeDef setOutputRange(HAL_OutputRange range);
 	HAL_StatusTypeDef getComplexData(int16_t *real,int16_t *imag);
 	HAL_StatusTypeDef frequencySweep(std::vector<int16_t> &real, std::vector<int16_t> &imag,int n,int repeatFirst);
+	HAL_StatusTypeDef frequencySweep(std::vector<std::complex<double>> &num,int n,int repeatFirst);
+
 	HAL_StatusTypeDef calibrate(std::vector<float> &gain,int ref,int n,std::vector<int16_t> &real, std::vector<int16_t> &imag);
+//	HAL_StatusTypeDef calibrate(std::vector<float> &gain,int ref,int n,std::vector<std::complex<double>> &num);
 	uint8_t readRegister(uint8_t reg);
 
 	double getTemp();
