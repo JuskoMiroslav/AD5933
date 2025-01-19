@@ -112,7 +112,7 @@ bool UartIT::is_tx_done(void)
 	return _is_tx_done;
 }
 
-uint16_t UartIT::avalible(){
+  uint16_t UartIT::avalible(){
 	return _buffer->count();
 }
 UartDMA::UartDMA(USART_TypeDef* instance, UART_HandleTypeDef* huart)
