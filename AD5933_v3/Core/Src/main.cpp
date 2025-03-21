@@ -28,8 +28,7 @@ recvUart(UartDMA &uart1, bool &newData, char *str);
 //freqSweep(UartDMA &uart1, AD5933 &ad5933, std::vector<int16_t> &real,
 //		std::vector<int16_t> &imag, settings set);
 
-bool sweepAtFreq(UartDMA &uart1, AD5933 &ad5933, settings set,
-		double ref);
+bool sweepAtFreq(UartDMA &uart1, AD5933 &ad5933, settings set, std::complex<double> ref,Dout led);
 uint8_t
 parseData(char *str, settings *set);
 bool
@@ -50,6 +49,9 @@ int main(void)
 	char str[100] =
 	{ 0 };
 	settings set;
+	std::vector<std::complex<double>> reference;
+	std::vector<std::complex<double>> measured;
+
 	set.SettlingCycles = 1;
 	bool newData = false;
 	UartDMA uart1(USART2, &huart2);
@@ -57,15 +59,19 @@ int main(void)
 	Dout LED1(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
 	Dout LED2(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
 	Dout LED3(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
-	Dout OscSw(GPIOB, GPIO_PIN_4, GPIO_PIN_RESET);
+	Dout OscSw(GPIOB, GPIO_PIN_4, GPIO_PIN_SET);
 	Dout OutSw(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
-	OscSw.write(GPIO_PIN_RESET);
+	LED1.write(GPIO_PIN_SET);
+
+	OscSw.write(GPIO_PIN_SET);
 	while (newData != true && strcmp(str, "Connected") != 0)
 	{
 		recvUart(uart1, newData, str);
 //  	  HAL_Delay(100);
 	}
-
+	AD5933 ad5933(&hi2c1);
+	uint8_t res = ad5933.init(10000, 1000, 10, OUTPUT_RANGE_1);
+	ad5933.frequencySweep(reference, 50, 50);
 
 	newData = false;
 //  parseData((char*)"StartSweep StartFrequency=100 StepFrequency=10 StepCount=2",&set);
@@ -73,8 +79,6 @@ int main(void)
 	bool StartSweep = false;
 	bool GetData = false;
 //  uint8_t repeatCount = 1;
-	AD5933 ad5933(&hi2c1);
-	uint8_t res = ad5933.init(10000, 1000, 10, OUTPUT_RANGE_2);
 	if (res != 0)
 	{
 
@@ -89,13 +93,10 @@ int main(void)
 		while (1)
 			;
 	}
-	std::vector<std::complex<double>> reference;
-	std::vector<std::complex<double>> measured;
 //	std::vector<float> gain;
 //	std::vector<int16_t> real;
 //	std::vector<int16_t> imag;
 	uart1.write((uint8_t*) "<Initialization succes>", 23);
-	ad5933.frequencySweep(reference, 50, 50);
 //	ad5933.calibrate(gain, 8200, 50, real, imag);
 	while (1)
 	{
@@ -105,23 +106,25 @@ int main(void)
 		recvUart(uart1, newData, str);
 		if (newData)
 		{
-			double vallue = 0;
+
 			switch (parseData(str, &set))
 			{
 			case 1:
 				ad5933.setPowerMode(POWER_STANDBY);
 				ad5933.reset();
 				StartSweep = true;
+				uart1.write((uint8_t*) "<Sweep Started>", 15);
 				break;
 			case 2:
-//				std::vector<std::complex<double>> ref;
 				OutSw.write(GPIO_PIN_SET);
 				reference.clear();
 				ad5933.setNumberIncrements(1);
 				ad5933.frequencySweep(reference, 1, 50);
-				vallue = std::abs(reference.at(0));
+
 				OutSw.write(GPIO_PIN_RESET);
-				sweepAtFreq(uart1, ad5933, set,vallue);
+				uart1.write((uint8_t*) "<Continuous Started>", 20);
+				sweepAtFreq(uart1, ad5933, set, reference.at(0),LED3);
+				setParameters(ad5933, set);
 				break;
 			case 3:
 				OutSw.write(GPIO_PIN_SET);
@@ -137,19 +140,26 @@ int main(void)
 			case 4:
 				GetData = true;
 				break;
+			case 5:
+				if (setParameters(ad5933, set))
+					uart1.write((uint8_t*) "<Parameters set>", 16);
+				else
+					uart1.write((uint8_t*) "<Parameters not set>", 20);
+
+				break;
 			case 7:
 				uart1.write((uint8_t*) "<Already connected>", 19);
 				break;
 			default:
 				;
 			}
-			if (GetData != true)
-			{
-				if (!setParameters(ad5933, set))
-					uart1.write((uint8_t*) "<NOK>", 5);
-				else
-					uart1.write((uint8_t*) "<OK> ", 5);
-			}
+//			if (GetData != true)
+//			{
+//				if (!setParameters(ad5933, set))
+//					uart1.write((uint8_t*) "<NOK>", 5);
+//				else
+//					uart1.write((uint8_t*) "<OK> ", 5);
+//			}
 			newData = false;
 			memset(str, 0, sizeof(str));
 		}
@@ -178,26 +188,23 @@ int main(void)
 			float freq = set.StartFreq / 1000.0;
 			uart1.write((uint8_t*) "<", 1);
 //			for (int i = 0; i < set.IncrementCount; i++)
-			int iteration = 0;
+			unsigned int iteration = 0;
 			for (const auto &num : measured)
 			{
 				memset(str, 0, sizeof(str));
-//				float z = sqrt(pow(real[i], 2) + pow(imag[i], 2));
-//				float phi = atan2(imag[i], real[i]);
-//				float Zabs = 1 / (z * gain.at(i));
-//				std::vector<double> gain =
-//				sprintf(str, "f:%8.3f, |Z|:%10.3f, ph:%10.3f,r:%ld,i%ld\n", freq, Zabs,
 				double magnitude = std::abs(reference.at(iteration));
 				double Zabs = 1 / (std::abs(num) * (1 / 424.3) / magnitude);
 
 				double phi = absoluteAngleDiffrence(std::arg(num),
 						std::arg(reference.at(iteration)));
-				sprintf(str, "f:%8.3f, |Z|:%10.3f, ph:%10.3f\n", freq, Zabs,
+				sprintf(str, "f:%8.3f, |Z|:%10.3f, ph:%10.3f\n\r", freq, Zabs,
 						phi);
 				uart1.write((uint8_t*) str, strlen(str) * sizeof(char));
+				iteration++;
+//				if(iteration < measured.size())
+//					uart1.write((uint8_t*) "\n\r", 2);
 				freq += set.IncrementFreq / 1000.0;
 				HAL_Delay(2);
-				iteration++;
 			}
 			uart1.write((uint8_t*) ">>>>>", 5);
 			measured.clear();
@@ -290,72 +297,28 @@ void recvUart(UartDMA &uart1, bool &newData, char *str)
 			recvInProgress = true;
 	}
 }
-//bool freqSweep(UartDMA &uart1, AD5933 &ad5933, std::vector<int16_t> &real,
-//		std::vector<int16_t> &imag, settings set)
-//{
-//	if (ad5933.setPowerMode(POWER_STANDBY) != HAL_OK
-//			|| ad5933.setControlRegister(CTRL_INIT_START_F) != HAL_OK
-//			|| ad5933.setControlRegister(CTRL_START_F_SWEEP) != HAL_OK)
-//		return false;
-//	int i = 0;
-//	int j = set.RepeatCount;
-//	while ((ad5933.readRegister(STATUS_REG) & STATUS_SWEEP_DONE)
-//			!= STATUS_SWEEP_DONE)
-//	{
-//		int16_t re = 0;
-//		int16_t im = 0;
-//		int32_t sumRe = 0;
-//		int32_t sumIm = 0;
-//		if (j > 0)
-//		{
-//			ad5933.setControlRegister(CTRL_REPEAT_FREQ);
-//			j--;
-//		}
-//		else
-//		{
-//			for (int k = 0; k < set.Averaging; k++)
-//			{
-//				if (ad5933.getComplexData(&re, &im) != HAL_OK)
-//					return false;
-//				if (i >= set.IncrementCount)
-//					return false;
-//				sumRe += re;
-//				sumIm += im;
-//			}
-//			real.push_back((int16_t) sumRe / set.Averaging);
-//			imag.push_back((int16_t) sumRe / set.Averaging);
-//			sumRe = 0;
-//			sumIm = 0;
-//
-//			i++;
-//			ad5933.setControlRegister(CTRL_INCREMENT_F);
-//
-//		}
-//
-//		while ((ad5933.readRegister(STATUS_REG) & STATUS_DATA_VALID)
-//				!= STATUS_DATA_VALID)
-//			if (HAL_GetTick() % 1000 == 0)
-//				uart1.write((uint8_t*) "<running> ", 11);
-//	}
-//	return ad5933.setPowerMode(POWER_STANDBY) == HAL_OK;
-//}
 
-bool sweepAtFreq(UartDMA &uart1, AD5933 &ad5933, settings set,
-		double ref)
+bool sweepAtFreq(UartDMA &uart1, AD5933 &ad5933, settings set, std::complex<double> ref, Dout led)
 {
 	if (ad5933.setPowerMode(POWER_STANDBY) != HAL_OK
 			|| ad5933.setControlRegister(CTRL_INIT_START_F) != HAL_OK
 			|| ad5933.setControlRegister(CTRL_START_F_SWEEP) != HAL_OK
 			|| ad5933.setStartFrequency(set.StartFreq))
-
+	{
+		ad5933.setPowerMode(POWER_STANDBY);
 		return false;
+	}
 	char rec[50] =
 	{ 0 };
 	bool newData = false;
 	std::complex<double> meas;
+	uint32_t oldTick = HAL_GetTick();
+	char str[100] =
+	{ 0 };
 	while (!(newData && strcmp(rec, "<STOP>")))
 	{
-		char str[100] = { 0 };
+
+
 		recvUart(uart1, newData, rec);
 		int16_t re = 0;
 		int16_t im = 0;
@@ -367,36 +330,18 @@ bool sweepAtFreq(UartDMA &uart1, AD5933 &ad5933, settings set,
 		if (ad5933.getComplexData(&re, &im) != HAL_OK)
 			return false;
 		std::complex<double> meas(re, im);
-		double Zabs = 1 / (std::abs(meas) * (1 / 424.3) / ref);
-		sprintf(str, "<f:1.0 |Z|:%8.3f, ph:%8.3f\n>", Zabs, std::arg(meas));
+		double Zabs = 1 / (std::abs(meas) * (1 / 424.3) / std::abs(ref));
+		double phi = absoluteAngleDiffrence(std::arg(meas),std::arg(ref));
+//		memset(str, 0, sizeof(str));
+
+		sprintf(str, "<f:%ld |Z|:%8.3f, ph:%8.3f>",HAL_GetTick()-oldTick, std::arg(meas), phi);
+//		sprintf(str, "<f:%ld |Z|:%8.3f, ph:%8.3f>",HAL_GetTick()-oldTick, Zabs, phi);
 
 		uart1.write((uint8_t*) str, strlen(str) * sizeof(char));
-
-		//		if (j > 0)
-//		{
-//			j--;
-//		}
-//		else
-//		{
-//			for (int k = 0; k < set.Averaging; k++)
-//			{
-
-//				if (i >= set.IncrementCount)
-//					return falsae;
-//				sumRe += re;
-//				sumIm += im;
-//			}
-//			real.push_back((int16_t) sumRe / set.Averaging);
-//			imag.push_back((int16_t) sumRe / set.Averaging);
-//			sumRe = 0;
-//			sumIm = 0;
-
-//			i++;
-//			ad5933.setControlRegister(CTRL_INCREMENT_F);
-
-//		}
-
-//			if (HAL_GetTick() % 1000 == 0)
+		while (HAL_GetTick() - oldTick < 5)
+			;
+		oldTick = HAL_GetTick();
+//	led.toggle();
 	}
 	return ad5933.setPowerMode(POWER_STANDBY) == HAL_OK;
 }
@@ -412,13 +357,13 @@ uint8_t parseData(char *str, settings *set)
 	strcpy(rest, str);
 	char *token = strtok_r(rest, " ", &rest);
 	const char *commands[] =
-	{ "StartSweep", "RepeatSweep", "Calibrate", "GetData" };
+	{ "StartSweep", "RepeatSweep", "Calibrate", "GetData", "SetParameters" };
 	const char *modifiers[] =
 	{ "StartFrequency", "StepFrequency", "StepCount", "RepeatCount",
 			"SettlingCycles", "Averaging" };
 	if (token != NULL)
 	{
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < 5; i++)
 		{
 			if (strcmp(token, commands[i]) == 0)
 			{
@@ -426,8 +371,9 @@ uint8_t parseData(char *str, settings *set)
 				break;
 			}
 		}
-		while (token != NULL)
+		while (token != NULL && mode == 5)
 		{
+			token = strtok_r(NULL, " ", &rest);
 			for (int i = 0; i < 6; i++)
 			{
 				int len = strlen(modifiers[i]);
@@ -435,6 +381,7 @@ uint8_t parseData(char *str, settings *set)
 				{
 					char *pStart = &token[len + 1];
 					int val = strtol(pStart, NULL, 10);
+					token = strtok_r(NULL, " ", &rest);
 					switch (i)
 					{
 					case 0:
@@ -457,7 +404,6 @@ uint8_t parseData(char *str, settings *set)
 					}
 				}
 			}
-			token = strtok_r(NULL, " ", &rest);
 		}
 	}
 	free(rest);

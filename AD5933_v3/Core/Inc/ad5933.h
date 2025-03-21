@@ -12,6 +12,7 @@
 #include <vector>
 #include <complex>
 #define AD5933_ADDR			(0x0D<<1)
+//#define OSC_FREQ			(1000000U)//(16000000U)
 #define OSC_FREQ			(16000000U)
 
 #define CTRL_REG1   		(0x80)
